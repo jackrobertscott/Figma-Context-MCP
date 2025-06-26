@@ -293,6 +293,196 @@ function registerTools(
       }
     },
   );
+
+  // Tool to update variables in a Figma file
+  server.tool(
+    "update_figma_variables",
+    "Create, update, or delete variables, variable collections, modes, and mode values in a Figma file",
+    {
+      fileKey: z
+        .string()
+        .describe(
+          "The key of the Figma file to update variables in, often found in a provided URL like figma.com/(file|design)/<fileKey>/...",
+        ),
+      changes: z
+        .object({
+          variableCollections: z
+            .array(
+              z.discriminatedUnion("action", [
+                z.object({
+                  action: z.literal("CREATE"),
+                  id: z.string().optional().describe("Optional temporary ID for this collection"),
+                  name: z.string().describe("Collection name (required for CREATE)"),
+                  description: z.string().optional().describe("Collection description"),
+                  modes: z
+                    .array(
+                      z.object({
+                        name: z.string().describe("Mode name"),
+                        modeId: z.string().optional().describe("Mode ID for existing modes"),
+                      })
+                    )
+                    .optional()
+                    .describe("Initial modes for the collection"),
+                }),
+                z.object({
+                  action: z.literal("UPDATE"),
+                  id: z.string().describe("ID of the collection to update"),
+                  name: z.string().optional().describe("New collection name"),
+                  description: z.string().optional().describe("New collection description"),
+                }),
+                z.object({
+                  action: z.literal("DELETE"),
+                  id: z.string().describe("ID of the collection to delete"),
+                }),
+              ])
+            )
+            .optional()
+            .describe("Variable collection changes"),
+          variableModes: z
+            .array(
+              z.discriminatedUnion("action", [
+                z.object({
+                  action: z.literal("CREATE"),
+                  id: z.string().optional().describe("Optional temporary ID for this mode"),
+                  variableCollectionId: z.string().describe("ID of the variable collection this mode belongs to"),
+                  name: z.string().describe("Mode name (required for CREATE)"),
+                }),
+                z.object({
+                  action: z.literal("UPDATE"),
+                  id: z.string().describe("ID of the mode to update"),
+                  variableCollectionId: z.string().describe("ID of the variable collection this mode belongs to"),
+                  name: z.string().optional().describe("New mode name"),
+                }),
+                z.object({
+                  action: z.literal("DELETE"),
+                  id: z.string().describe("ID of the mode to delete"),
+                }),
+              ])
+            )
+            .optional()
+            .describe("Variable mode changes"),
+          variables: z
+            .array(
+              z.discriminatedUnion("action", [
+                z.object({
+                  action: z.literal("CREATE"),
+                  id: z.string().optional().describe("Optional temporary ID for this variable"),
+                  name: z.string().describe("Variable name (required for CREATE)"),
+                  description: z.string().optional().describe("Variable description"),
+                  variableCollectionId: z.string().describe("ID of the variable collection (required for CREATE)"),
+                  resolvedType: z
+                    .enum(["BOOLEAN", "COLOR", "FLOAT", "STRING"])
+                    .describe("Variable type (required for CREATE)"),
+                  remote: z.boolean().optional().describe("Whether variable is remote/published"),
+                  scopes: z
+                    .array(z.enum([
+                      "ALL_SCOPES",
+                      "TEXT_CONTENT", 
+                      "CORNER_RADIUS",
+                      "WIDTH_HEIGHT",
+                      "GAP",
+                      "ALL_FILLS",
+                      "FRAME_FILL",
+                      "SHAPE_FILL", 
+                      "TEXT_FILL",
+                      "STROKE_COLOR",
+                      "EFFECT_COLOR"
+                    ]))
+                    .optional()
+                    .describe("Scopes where this variable can be applied"),
+                }),
+                z.object({
+                  action: z.literal("UPDATE"),
+                  id: z.string().describe("ID of the variable to update"),
+                  name: z.string().optional().describe("New variable name"),
+                  description: z.string().optional().describe("New variable description"),
+                  remote: z.boolean().optional().describe("Whether variable is remote/published"),
+                  scopes: z
+                    .array(z.enum([
+                      "ALL_SCOPES",
+                      "TEXT_CONTENT", 
+                      "CORNER_RADIUS",
+                      "WIDTH_HEIGHT",
+                      "GAP",
+                      "ALL_FILLS",
+                      "FRAME_FILL",
+                      "SHAPE_FILL", 
+                      "TEXT_FILL",
+                      "STROKE_COLOR",
+                      "EFFECT_COLOR"
+                    ]))
+                    .optional()
+                    .describe("Scopes where this variable can be applied"),
+                }),
+                z.object({
+                  action: z.literal("DELETE"),
+                  id: z.string().describe("ID of the variable to delete"),
+                }),
+              ])
+            )
+            .optional()
+            .describe("Variable changes"),
+          variableModeValues: z
+            .array(
+              z.object({
+                variableId: z.string().describe("Variable ID (can use temp ID)"),
+                modeId: z.string().describe("Mode ID within the variable collection"),
+                value: z
+                  .union([
+                    z.boolean(),
+                    z.number(),
+                    z.string(),
+                    z.object({
+                      r: z.number().min(0).max(1),
+                      g: z.number().min(0).max(1),
+                      b: z.number().min(0).max(1),
+                      a: z.number().min(0).max(1).optional(),
+                    }),
+                    z.object({
+                      type: z.literal("VARIABLE_ALIAS"),
+                      id: z.string(),
+                    }),
+                  ])
+                  .describe("The value for this variable in this mode (boolean, number, string, color object, or variable alias)"),
+              })
+            )
+            .optional()
+            .describe("Variable mode values to set"),
+        })
+        .describe("The changes to make to variables, collections, modes, and values"),
+    },
+    async ({ fileKey, changes }) => {
+      try {
+        Logger.log(`Updating variables in file ${fileKey}`);
+        Logger.log("Processing changes:", JSON.stringify(changes, null, 2));
+        
+        const response = await figmaService.updateVariables(fileKey, changes);
+        
+        const result = {
+          status: response.status,
+          error: response.error,
+          meta: response.meta || {},
+        };
+
+        Logger.log("Variables updated successfully");
+        Logger.log(`Generating ${outputFormat.toUpperCase()} result from update response`);
+        const formattedResult =
+          outputFormat === "json" ? JSON.stringify(result, null, 2) : yaml.dump(result);
+
+        Logger.log("Sending update result to client");
+        return {
+          content: [{ type: "text", text: formattedResult }],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        Logger.error(`Error updating variables in file ${fileKey}:`, message);
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Error updating variables: ${message}` }],
+        };
+      }
+    },
+  );
 }
 
 export { createServer };

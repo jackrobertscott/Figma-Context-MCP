@@ -1,17 +1,19 @@
-import fs from "fs";
-import { parseFigmaResponse, type SimplifiedDesign } from "./simplify-node-response.js";
 import type {
-  GetImagesResponse,
-  GetFileResponse,
   GetFileNodesResponse,
+  GetFileResponse,
   GetImageFillsResponse,
+  GetImagesResponse,
   GetLocalVariablesResponse,
   GetPublishedVariablesResponse,
+  PostVariablesRequestBody,
+  PostVariablesResponse,
 } from "@figma/rest-api-spec";
-import { downloadFigmaImage } from "~/utils/common.js";
-import { Logger } from "~/utils/logger.js";
-import { fetchWithRetry } from "~/utils/fetch-with-retry.js";
+import fs from "fs";
 import yaml from "js-yaml";
+import { downloadFigmaImage } from "~/utils/common.js";
+import { fetchWithRetry } from "~/utils/fetch-with-retry.js";
+import { Logger } from "~/utils/logger.js";
+import { parseFigmaResponse, type SimplifiedDesign } from "./simplify-node-response.js";
 
 export type FigmaAuthOptions = {
   figmaApiKey: string;
@@ -53,12 +55,18 @@ export class FigmaService {
     this.useOAuth = !!useOAuth && !!this.oauthToken;
   }
 
-  private async request<T>(endpoint: string): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: { method?: string; body?: any } = {},
+  ): Promise<T> {
     try {
-      Logger.log(`Calling ${this.baseUrl}${endpoint}`);
+      const { method = "GET", body } = options;
+      Logger.log(`Calling ${method} ${this.baseUrl}${endpoint}`);
 
       // Set auth headers based on authentication method
-      const headers: Record<string, string> = {};
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
 
       if (this.useOAuth) {
         // Use OAuth token with Authorization: Bearer header
@@ -71,7 +79,9 @@ export class FigmaService {
       }
 
       return await fetchWithRetry<T>(`${this.baseUrl}${endpoint}`, {
+        method,
         headers,
+        body: body ? JSON.stringify(body) : undefined,
       });
     } catch (error) {
       if (error instanceof Error) {
@@ -202,6 +212,29 @@ export class FigmaService {
       return response;
     } catch (e) {
       console.error("Failed to get published variables:", e);
+      throw e;
+    }
+  }
+
+  async updateVariables(
+    fileKey: string,
+    changes: PostVariablesRequestBody,
+  ): Promise<PostVariablesResponse> {
+    try {
+      const endpoint = `/files/${fileKey}/variables`;
+      Logger.log(`Updating variables for file: ${fileKey}`);
+      Logger.log("Changes:", JSON.stringify(changes, null, 2));
+
+      const response = await this.request<PostVariablesResponse>(endpoint, {
+        method: "POST",
+        body: changes,
+      });
+
+      Logger.log("Variables updated successfully");
+      writeLogs("figma-variables-update-response.yml", response);
+      return response;
+    } catch (e) {
+      console.error("Failed to update variables:", e);
       throw e;
     }
   }
