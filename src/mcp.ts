@@ -207,6 +207,92 @@ function registerTools(
       }
     },
   );
+
+  // Tool to get local variables from a Figma file
+  server.tool(
+    "get_figma_local_variables",
+    "Get all local variables and variable collections from a Figma file",
+    {
+      fileKey: z
+        .string()
+        .describe(
+          "The key of the Figma file to fetch variables from, often found in a provided URL like figma.com/(file|design)/<fileKey>/...",
+        ),
+    },
+    async ({ fileKey }) => {
+      try {
+        Logger.log(`Fetching local variables from file ${fileKey}`);
+        const response = await figmaService.getLocalVariables(fileKey);
+        
+        const { variables, variableCollections } = response.meta;
+        
+        const result = {
+          variables,
+          variableCollections,
+        };
+
+        Logger.log(`Successfully fetched ${Object.keys(variables).length} variables and ${Object.keys(variableCollections).length} collections`);
+        Logger.log(`Generating ${outputFormat.toUpperCase()} result from variables`);
+        const formattedResult =
+          outputFormat === "json" ? JSON.stringify(result, null, 2) : yaml.dump(result);
+
+        Logger.log("Sending variables result to client");
+        return {
+          content: [{ type: "text", text: formattedResult }],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        Logger.error(`Error fetching local variables from file ${fileKey}:`, message);
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Error fetching local variables: ${message}` }],
+        };
+      }
+    },
+  );
+
+  // Tool to get published variables from a Figma file
+  server.tool(
+    "get_figma_published_variables",
+    "Get all published variables and variable collections from a Figma file",
+    {
+      fileKey: z
+        .string()
+        .describe(
+          "The key of the Figma file to fetch published variables from, often found in a provided URL like figma.com/(file|design)/<fileKey>/...",
+        ),
+    },
+    async ({ fileKey }) => {
+      try {
+        Logger.log(`Fetching published variables from file ${fileKey}`);
+        const response = await figmaService.getPublishedVariables(fileKey);
+        
+        const { variables, variableCollections } = response.meta;
+        
+        const result = {
+          variables,
+          variableCollections,
+        };
+
+        Logger.log(`Successfully fetched ${Object.keys(variables).length} published variables and ${Object.keys(variableCollections).length} collections`);
+        Logger.log(`Generating ${outputFormat.toUpperCase()} result from published variables`);
+        const formattedResult =
+          outputFormat === "json" ? JSON.stringify(result, null, 2) : yaml.dump(result);
+
+        Logger.log("Sending published variables result to client");
+        return {
+          content: [{ type: "text", text: formattedResult }],
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : JSON.stringify(error);
+        Logger.error(`Error fetching published variables from file ${fileKey}:`, message);
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Error fetching published variables: ${message}` }],
+        };
+      }
+    },
+  );
 }
 
 export { createServer };

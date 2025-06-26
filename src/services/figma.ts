@@ -5,6 +5,8 @@ import type {
   GetFileResponse,
   GetFileNodesResponse,
   GetImageFillsResponse,
+  GetLocalVariablesResponse,
+  GetPublishedVariablesResponse,
 } from "@figma/rest-api-spec";
 import { downloadFigmaImage } from "~/utils/common.js";
 import { Logger } from "~/utils/logger.js";
@@ -174,6 +176,34 @@ export class FigmaService {
     const simplifiedResponse = parseFigmaResponse(response);
     writeLogs("figma-simplified.yml", simplifiedResponse);
     return simplifiedResponse;
+  }
+
+  async getLocalVariables(fileKey: string): Promise<GetLocalVariablesResponse> {
+    try {
+      const endpoint = `/files/${fileKey}/variables/local`;
+      Logger.log(`Retrieving local variables for file: ${fileKey}`);
+      const response = await this.request<GetLocalVariablesResponse>(endpoint);
+      Logger.log("Got local variables response");
+      writeLogs("figma-local-variables.yml", response);
+      return response;
+    } catch (e) {
+      console.error("Failed to get local variables:", e);
+      throw e;
+    }
+  }
+
+  async getPublishedVariables(fileKey: string): Promise<GetPublishedVariablesResponse> {
+    try {
+      const endpoint = `/files/${fileKey}/variables/published`;
+      Logger.log(`Retrieving published variables for file: ${fileKey}`);
+      const response = await this.request<GetPublishedVariablesResponse>(endpoint);
+      Logger.log("Got published variables response");
+      writeLogs("figma-published-variables.yml", response);
+      return response;
+    } catch (e) {
+      console.error("Failed to get published variables:", e);
+      throw e;
+    }
   }
 }
 
